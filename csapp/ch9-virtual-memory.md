@@ -38,3 +38,56 @@ PS: Virtual page 和 physical page (page frame) 一般大小一样。
 所以只有一开始，需要把这部分 working set 读入到主存的时候，才需要和 disk 交互。
 
 *Trashing*: 当 working set 大小比主存大，或者应用程序没有 locality 时，需要频繁地进行 swaping，这种情况叫 trashing。
+
+
+# 9.4 VM as a Tool for Memory Management
+VM 能大大地简化内存管理。
+
+不同的应用程序有不同的 page table 和不同的虚拟地址空间。
+
+demand paging 和 separate virtual addres space 有非常大的好处:
+
+* 简化 linking:
+link 的时候，不同的应用程序可以使用一样的地址，而不用考虑 code 和 data 在物理内存的真实位置。
+比如，在 Linux 中，代码段都是从 0x400000 开始的。
+
+* 简化 loading:
+便于 load executable and shared object files into memory.
+比如要 load .text 和 .data sections of an object file
+Linux loader 只要分配一下代码段和数据段，然后在 page table 中把相应的表项标记为 invalid。
+最后把这些数据在 disk 中的地址填入到表项当中。
+
+	Note: loading 的过程并没有真正把数据载入到主存中。
+
+	Note: 把一块连续的虚拟页映射到一个文件中的一个任意的位置叫 *memory mapping*。
+	Linux 中有一个 system call `mmap` 实现了这个功能。
+
+* 简化 sharing:
+有的时候不同的应用程序需要共享 code 和 data。
+比如标准的库文件 `printf`。
+使用 VM 来共享的方法很简单，只要将不同应用程序的 virual page 映射到同一块 physical page 就行。
+
+* 简化内存分配:
+如果需要(使用 malloc)分配一块连续的内存，只要分配若干块连续的 virtual page，
+然后把这些 virutal page 映射为任意的 physical memory 即可。
+也就是说，没有必要真正地去分配连续的物理内存。
+
+# 9.5 VM as a Tool for Memory Protection
+内存保护：
+
+1. 不能修改 read-only 代码段
+2. 不能修改 kernel 中的代码和数据
+3. 不能修改和其它进程共享的虚拟页面
+4. 不能修改其它应用程序的私有页面
+
+通过 separate virtual address space，不同的应用程序对内存的访问可以隔离开来。
+
+通过在 page table 中设置一些许可标志位，可以实现内存保护的其它功能，比如：
+
+* SUP 位：表示这个页面需要 kernel (supervisor) 模式来访问
+* READ 和 WRITE 位：顾名思义，这个页面能否被读和写
+
+如果应用程序违反了这些许可标志位，则会触发 protection fault
+Linux shell 会 report this exception as a **segmentation fault**。
+
+# 9.6 Address Translation
