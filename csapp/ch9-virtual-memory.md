@@ -31,6 +31,7 @@ PS: Virtual page 和 physical page (page frame) 一般大小一样。
 5. 重新启动地址转换的过程
 
 *Demand Paging*: the strategy of waiting until the last moment to swap in a page
+
 所有 modern systems 都使用 demand paging
 
 ## Locality (局部性原理？)
@@ -91,3 +92,78 @@ Linux loader 只要分配一下代码段和数据段，然后在 page table 中�
 Linux shell 会 report this exception as a **segmentation fault**。
 
 # 9.6 Address Translation
+CPU 中有一个 control register 叫做 *page table base register (PTBR)*.
+PTBR 存储着当前 page table 的首地址。
+
+虚拟地址（假设有 n 位）可以分成两个部分，
+一个部分是 *virtual page offset (VPO)* （假设有 p 位），
+另外一个部分是 (n-p) 位的 *virtual page number (VPN)*。
+VPO 和 *physical page offset (PPO)* 的值是一样的。
+
+**数据读取过程 (page hint)** (Figure 9.13(a)):
+
+1. CPU 生成一个虚拟地址，并把虚拟地址交给 MMU
+2. MMU 生成 PTE (page table entry) 的地址，并地址发送给 cache 或主存
+3. Cache 或主存返回 PTE 给 MMU
+4. MMU 根据 PTE 生成物理地址，并把根据物理地址，发送给 cache 或主存
+5. Cache 或主存返回所要读取的数据
+
+**数据读取过程 (page fault)** (Figure 9.13(b)):
+
+1. CPU 生成一个虚拟地址，并把虚拟地址交给 MMU
+2. MMU 生成 PTE (page table entry) 的地址，并地址发送给 cache 或主存
+3. Cache 或主存返回 PTE 给 MMU
+4. MMU 发现 PTE 中 valid bit 为0，因此 MMU 触发一个异常，调用 OS 中的 page fault exception handler。
+5. Fault handler 选择主存中的一个 victime page，如果这个页被写过，则将该页 page out disk 中。
+6. Fault handler 把要读取的页 page in，并更新 PTE
+7. 重新启动地址转换过程。即 CPU 重新发送虚拟地址。
+4. MMU 根据 PTE 生成物理地址，并把根据物理地址，发送给 cache 或主存
+5. Cache 或主存返回所要读取的数据
+
+## 9.6.1 Integrating Caches and VM
+Figure 9.14: 在有 Cache 的情况下使用虚拟地址读取数据的过程
+
+## 9.6.2 Speeding Up Address Translation with a TLB
+**TLB (Translation Lookaside Buffer)** 是一个在 MMU 中的一块 small cache。
+
+TLB 的输入是 VPN，输出是 PTE。
+在 TLB 查找 PTE 的过程中，VPN 可以分成两个部分：*TLB tag (TLBT)* 和 *TLB index (TLBI)* (Figure 9.15)。
+TLBI 用于选择 set，而 TLBT 用于匹配。
+(Example: Figure 9.20(a))
+
+
+**数据读取过程 (TLB hint)** (Figure 9.16(b)):
+
+1. CPU 生成一个虚拟地址，并发送给 MMU
+2. MMU 从 TLB 中读取 PTE
+3. MMU 把虚拟地址转换为物理地址，并把物理地址发送给 cache/main memory
+4. cache/main memory 返回要读取的数据
+
+
+## 9.6.3 Multi-level Page Tables
+需要在内存中的 page table 大小可能很大：
+比如 32-bit address, 4KB pages (总共有 1MB pages)，4-byte PTE，则一张 page table 的大小为 4MB。
+如果是 64-bit address 的话，page table 会更大。
+
+为了减少内存占用，我们可以使用多级 page table。
+
+例子(Figure 9.17)：一个两级 page table，第一级的 PTE 包含 1024 pages，指向 1024 个 PTE 的首地址。
+当第一级的 PTE 所包含的 1024 pages 都还未被分配时，第一级的 PTE 地址为 null，否则，其指向 1024 个第二级 page table 的首地址。
+
+**为什么多级页表能节省内存占用**:
+
+1. 如果上一级的 PTE 为 null，那么下一级的 page table 就不需要存在。因为大部分的虚拟内存其实都是没有被分配的，所以很多 page table 都可以不存在于内存当中。
+
+2. 只有第一级的 page table 需要常驻于内存当中，低级的 page table 只有要访问到的时候才需要被 page in 到主存当中。
+
+
+一个多级页表的例子: Figure 9.18.
+
+## 9.6.4 Putting It Together: End-to-End Address Translation
+Figure 9.19: 虚拟地址和物理地址的格式
+Figure 9.20: TLB, page table 和 cache
+
+具体过程可以看 p823 页。
+
+
+# 9.7 Case Study: The Intel Core i7/Linux Memory System
