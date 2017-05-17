@@ -167,3 +167,57 @@ Figure 9.20: TLB, page table 和 cache
 
 
 # 9.7 Case Study: The Intel Core i7/Linux Memory System
+Intel Core i7:
+
+* 48-bit virtual address, 52-bit physical address; compatibility mode: 32-bit virutal and physical address (虚拟地址空间比物理地址空间小)
+* 两级 TLB，每个 TLB 是 4-way 的（也就是说，每次可以同时访问 4 个 entry）
+* Figure 9.21 CPU 的结构
+* Page size 可以设置为 4KB 或者 4MB，Linux 使用 4KB
+* Four-level page table
+
+## 9.7.1 Core i7 Address Translation
+Figure 9.22.
+
+四层 page table，在 Linux 中，所有被分配内存的页所对应的页表都是常驻于内存当中的。
+
+*CR3* control register 中存放的是第一级 (L1) 页表的起始地址。
+
+Figure 9.23 是第1-3级页表的表项的格式，Figure 9.24 是第四级页表表项的格式。
+
+页表表项中的标志位：
+
+* R/W: 是否只读
+* U/S: 这个页面能否在用户态被访问
+* XD: execute disable，是否禁止从该页面获取指令（用于减少 buffer overflow 带来的危害）
+
+内核 fault handler 所使用的标志位:
+
+* A bit (reference bit): 页面被访问
+* D bit (dirty bit): 页面被写入数据
+
+## 9.7.2 Linux Virutal Memory System
+Figure 9.26: 一个 Linux 进程的虚拟内存结构
+
+### Linux Virtual Memory Areas
+Linux 把虚拟内存分为不同的 areas (或 segments)，例如 code segment, data segment, heap, shared library segment, user stack.
+
+把虚拟内存分为不同 area 的好处是允许 virtual address space 有 gaps：
+内核不会 keep track of virtual pages that do not exist，这些 pages 也不会占用资源（内存，disk，以及 kernel)。
+
+
+Figure 9.27: 内核中用于 keep track of virtual memory areas 的数据结构：
+
+`task_struct`: 每个进程都有的一个数据结构，用于存储进程的一些信息（PID, pointer to user stack, name of executable object file, program counter)
+
+`mm_struct`: `task_struct` 里的一个变量，里面包含两个变量：
+
+* `pgd`: 指向第一级 page table 的起始地址
+* `mmap`: 指向 `vm_area_structs` 结构体链表，链表中的每一项都表示一个 area
+
+### Linux Page Fault Exception Handling
+当 MMU 触发 page fault 时，kernel 中的 page fault handler 会来处理这个异常：
+
+1. 检查虚拟地址是否合法：检查该地址是否属于某一个 area，更具体的说，是否存在于某一个 `vm_area_structs` 中。
+如果不存在，则触发 segmentation fault，进程终止
+2. 检查访问是否符合权限：这个进程是否有权限对页面进行读或写或执行。如果不符合权限的要求，则触发 protection exception，终止进程
+3. 选择 victim page，进行 swap out 和 swap in
