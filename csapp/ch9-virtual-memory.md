@@ -221,3 +221,65 @@ Figure 9.27: 内核中用于 keep track of virtual memory areas 的数据结构�
 如果不存在，则触发 segmentation fault，进程终止
 2. 检查访问是否符合权限：这个进程是否有权限对页面进行读或写或执行。如果不符合权限的要求，则触发 protection exception，终止进程
 3. 选择 victim page，进行 swap out 和 swap in
+
+# 9.8 Memory Mapping
+Linux 使用 disk 中的 *object* 来初始化一块虚拟内存 area 的过程叫 *memory mapping*。
+
+分为两类：
+
+* Regular file in Linux file systems: 将虚拟内存映射为 disk file 中的一块连续数据。
+文件被切分为 page size。这些数据在被使用到时才会被 swap in 内存。
+
+* Anonymous file: 这个并不是真正的文件。文件中所有的数据都是0。
+当 CPU 要访问这么一块 virutal page 时，首先会 swap out 脏页，然后把页面里的所有数据都置为0。
+所以 swap in 的时候并没有和 disk 进行交互。这种 map 又称为 *demand-zero pages*。
+
+
+## 9.8.1 Shared Object Revisited
+通过 memory mapping 可以把不同进程的虚拟内存映射到同一个 object 上（比如 `printf`)。
+
+Object 分为两种:
+
+* shared object: 映射到 shared object 的虚拟内存 area 也成为 *shared area*，一个进程对 shared area 进行修改时，其它进程也能看得到。
+* private object: 映射到 private object 的虚拟内存 area 称为 *private area*，一个进程对 private area 进行的修改，其它进程不能感知到。
+
+例子：
+Figure 9.29: 两个不同进程的虚拟内存被映射到同一个 shared object 中。
+
+Figure 9.30: 两个不同进程的虚拟内存被映射到同一个 private object。
+如果不进行写操作的话，不同进程的虚拟内存指向的是同一块物理内存。
+Private area 的页是 read-only 的，更具体地说，这一块 area struct 会被标记为 *private copy-on-write*。
+如果进程尝试进行写操作，会触发 protection exception，
+此时 fault handler 会 copy 这一个物理页到另一个物理页中，然后重新进行写操作。
+
+## 9.8.2 The `fork` Function Revisited
+当一个进程创建新进程时，kernel 首先会创建进程的一些数据结构。
+然后，为新进程创建和当前进程一样的 mm_struct 结构体。
+
+接下来，就使用到了 private object：所有的页面都被标记为 read-only，并且两个进程中的每一个 area struct 都被标记为 copy-on-write。
+
+可想而知，接下来只有当进程需要写页面时，才会创建新的页面。
+
+## 9.8.3 The `execve` Function Revisited
+当进程执行以下代码时:
+
+	execve("a.out", NULL, NULL);
+
+会进行以下操作：
+
+1. 删除现有的 user areas
+2. 对 private area 进行 map:
+
+	* code 和 data areas 映射到 `a.out` 文件中的 `.text` 和 `.data` sections，标记为 copy-on-write
+	* bss area, stack area, heap area 都是 demand zero
+
+3. 对 shared area 进行 map:
+dynamically link shared objects (e.g., standard C library libc.so) into the program,
+and map into the shared region of the user's virtual address space.
+
+4. 设置 program counter (PC)
+
+## 9.8.4 User-Level Memory Mapping with the `mmap` Function
+`mmap` 函数可以供 Linux 进程来进行 memory map
+
+函数的说明见 P838.
