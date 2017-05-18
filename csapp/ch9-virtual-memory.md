@@ -486,3 +486,50 @@ C 实现 Mark&Sweep 的困难:
 
 Conservasive: 由于不能判断数据类型，可能把某些不是指针的数据误判为指针，
 而这个数据所代表的地址又恰好指向某一块 heap block，就会导致错误地 mark 这一块 block。
+
+# 9.11 Common Memory-Related Bugs in C Programs
+作为一个程序员，
+应该能深深地体会到 memory-related bugs (segmentatin fault) 对你的 "毒害"。
+
+## 9.11.1 Dereferencing Bad Pointers
+啥叫 dereference? 两个操作符：`&` 表示 reference, `*` 表示 dereference。
+
+指针所指向的地址不合法，但是进行了 dereference --> segmentation fault。
+
+比如，把某个非指针变量当成指针用：
+
+	scanf("%d", val);
+
+## 9.11.2 Reading Uninitialized Memory
+顾名思义，直接看 P871 的例子吧。
+
+## 9.11.3 Allowing Stack Buffer Overflows
+P871 例子
+
+## 9.11.4 Assuming That Pointers and the Objects They point to Are the same Size
+P872 例子：line 5 should be `malloc(n * sizeof(int*))`
+
+## 9.11.5 Making Off-by-One Errors
+P872 例子: line 7 `i <=n ` instead of `i < n`
+
+## 9.11.6 Referencing a Pointer Instead of the Object It Points To
+P873 例子：line 6: `*size--` instead of `(*size)--`
+
+## 9.11.7 Misunderstanding Pointer Arithmetic
+对指针的运算是以指针所指向的 object size 为单位的。
+例如 `int *p; p + 1`，实际上地址加了 `sizeof(int)`。
+
+P873 例子
+
+## 9.11.8 Referencing Nonexistent Variables
+P874 例子
+
+## 9.11.9 Referencing Data in Free Heap Blocks
+指向已经被 free 掉的数据
+
+P874 例子
+
+## 9.11.10 Introducing Memory Leaks
+忘记释放内存
+
+P875 例子
