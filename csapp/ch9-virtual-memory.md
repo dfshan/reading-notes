@@ -283,3 +283,169 @@ and map into the shared region of the user's virtual address space.
 `mmap` 函数可以供 Linux 进程来进行 memory map
 
 函数的说明见 P838.
+
+# 9.9 Dynamic Memory Allocation
+动态内存分配是在 *heap* area 中进行的。
+Kernel 中的 `brk` (break) 变量指向 head 的头部。
+
+Heap 由一些不同大小的 *blocks* 组成。
+每一个 block 有可能是已经被 *allocated*，也有可能是 *free* 的。
+
+有两种 *allocator*:
+
+* **显式 allocator**: 需要显式地分配和释放 blocks。比如 C 中的 `malloc` 和 `free`。
+* **隐式 allocator**: Allocator 需要检测出哪些 allocated block 不会再被用到了，然后自动地把这些 block 释放掉。这个过程也称为 *garbage collectors*。
+
+## 9.9.1 The `malloc` and `free` Functions
+In 32-bit mode (gcc -m32), `malloc` returns a block whose address is always a multiple of 8.
+
+In 64-bit mode (gcc -m64), `malloc` returns a block whose address is always a multiple of 16.
+
+`calloc`: 初始化动态内存
+
+`realloc`: 改变之前被分配的 block 的大小
+
+`malloc` 可以通过使用 `mmap` 和 `munmap` 来增大和减少 heap memory 的大小。
+也可以使用 `sbrk` 函数。`sbrk` 函数会增加内核中的 `brk` 指针。
+
+Figure 9.34: 一个简单的例子
+
+
+## 9.9.2 Why Dynamic Memory Allocation ?
+因为程序运行之前不知道该分配多少内存。
+
+## 9.9.3 Allocator Requiremewnts and Goals
+
+显示 allocator 需要满足下列需求：
+
+1. 能处理任意顺序的 allocate 和 free 的请求:
+Allocator 不能事先假定 allocate 和 free 请求的顺序
+2. 马上对请求做出响应：
+Allocator 不能对请求进行重新排序或延迟对请求的处理(比如 coalescing)以提高性能。
+3. 只使用 heap:
+任何 nonscalar 数据结构都要存储在 heap 当中。
+4. 需要对 block 进行 align:
+8 的倍数或 16 的倍数。
+5. 不能更改被分配的 blocks:
+Allcators 只能去修改 free blocks。
+
+目标：
+1. 最大化吞吐量：单位时间内能处理的请求数
+2. 最大化内存利用率：
+内存利用率可以用 *peak utilization* 来衡量，
+即前 k 个请求中，被分配的最大大小除以第 k 个请求时 heap 的大小。(见 P845)
+
+## 9.9.4 Fragmentation
+两种 fragmentation: *internal fragmentation* 和 *external fragmentation*:
+
+* *Internal fragmentation*: 被分配的 block 比实际需要的要大。理由：alignment 或 allocator 对最小大小有要求。
+* *External fragmentation*: 两个 allocated blocks 之间有许多 free block，而每一个 free block 又不能满足要分配的内存的大小。
+
+## 9.9.5 Implementation Issues
+
+* Free block 的组织：怎么 keep track of free blocks
+* Placement: 在分配内存时，怎么挑选一块 free block 分配给它
+* Splitting: 当选择一块 free block 并进行分配时，怎么处理 free block 中剩下的部分。
+* Coalescing: 当一块 block 被释放时，怎么处理？
+
+## 9.9.6 Implicit Free Lists
+每个 block 的格式如 Figure 9.35 所示。
+
+每个 block 有一个头部，头部包含了两个信息：这个 block 的大小以及这个 block 是否被分配。
+
+Figure 9.35 中，block size 必须时 8 的倍数，所以 block size 的最低3 位为 0，最低 3 位的最后一位用来表示该 block 是否被分配。
+
+Figure 9.36 是整个 heap 的一个结构。heap 的最后一个 block 是一个 size 为 0 的 block，用来表示 heap 到此结束了。
+
+这个 heap 结构可以通过头指针和每个 block size 来遍历所有的 block。
+遍历过程中可以搜索 free block。
+由于没有显示地把 free block 构造成为一个 list，所以称为 *implicit free lists*。
+
+**优点**: 简单， **缺点**: 找到一块合适的 free block 需要 O(n) 的时间。
+
+Alignment requirement and minimum block size:
+假设 alignment 是 double-word，则每一块 block 的大小都必须是 9B 的倍数。另外，还可能需要 1 word 用来存储 header。
+
+## 9.9.7 Placing Allocated Blocks
+在受到内存分配请求时，allocator 需要选择一块空闲内存来分配，有三种策略：
+
+1. *First fit*: 第一块被搜索到的大小足够大的 free block
+2. *Next fit* (Donald Knuth): 从上一次搜索结束的地方开始搜索，然后搜索到第一块合适的 free block
+3. *Best fit*: 所有的大小足够大的 free block 里面，找到最小的一块
+
+## 9.9.8 Splitting Free Blocks
+找到 free block 之后，有两种策略：一是把所有的 free block 都分配出去，优点是简单且快，缺点是有 internal fragmentation。
+适用于要分配的大小与 free block 的大小相差不大。
+
+二是把 free block 分为两个部分。
+
+## 9.9.9 Getting Additional Heap Memory
+当找不到足够大的能被分配的 free block 时 (即便把相邻的 free blocks 聚合起来也找不到)，
+allocator 需要调用 `sbrk` 函数向内核申请新的内存，这一块内存作为一块新的 free block 插入到 free list 尾部。
+
+## 9.9.10 Coalescing Free Blocks
+如果有很多相邻的 free block，可能会导致 *false fragmentation* (Figure 9.38)，
+即有很多 available free memory，但是都被分成了很小的不够用的 free blocks。
+
+把这些 free blocks 聚合起来的过程叫 *coalescing*，分为 *immediate coalescing* (一个 block 被 free 了就 coalescing) 和 *deferred coalescing*。
+
+*Immediate coalescing*: 很直接，但是频繁地 coalescing 和 split 可能会导致 trashing。
+
+## 9.9.11 Coalescing with Boundary Tags
+对于一个 free block 而言，它想 coalescing 后面的 block 容易(直接找到后面的 block check 一下是不是 free)，
+但是想 coalescing 前面的 block 就不太容易了，问题类似于单向链表找 previous node。
+
+*Boundary tags* (by Knuth)：在每一个 block 中加一个 *footer* (boundary tag)。
+Footer 的值和 header 一模一样。这样单向链表就变成了双向链表。
+
+## 9.9.12 Putting It Together: Implementing a Simple Allocator
+有时间看看，可以加深对动态内存分配的理解。
+
+### General Allocator Design
+Figure 9.41
+
+### Basic Constants and Macros for Manipulating the Free List
+Figure 9.43
+
+### Creating the Initial Free List
+Figure 9.44 & 9.45
+
+### Freeing and Coalescing Blocks
+Figure 9.46
+
+### Allocating Blocks
+Figure 9.47
+
+## 9.9.13 Explicit Free Lists
+Implicit free list 的 block allocation time 是线性的，不适用于 general purpose allocator，适用于 heap blocks 数目较小的时候。
+
+*Explicit free lists*: 把 free blocks 通过双向链表连接起来，如 Figure 9.48 所示。
+
+在释放 block 的时候，需要把 free block 放入 free list 中，
+有两种策略，一种是把 free block 放入链表头部，这样简单但是 memory utilization 可能不高;
+
+另外一种是按 *address order* 来组织 free list，这样把 free block 插入 free list 可能需要线性的时间。
+
+## 9.9.14 Segregated Free Lists
+按不同的 free block 大小，把 free block 放入不同的 List 中存放。
+
+这样分配请求时，就不需要遍历所有的 free blocks 了。
+
+### Simple Segregated Storage
+所有的 free list 仅包含相同大小的 free block。不切分 free block，即把整个 free block 分配出去。
+如果某一个 free list 空了，直接向操作系统请求内存。
+
+*优点*: 分配和释放内存都快，因为无需 splitting 和 coalescing。因此也不需要 footer，不需要双向链表。
+
+*缺点*: internal fragmentaion and external fragmentation
+
+### Segregated Fits (被 GNU `malloc` 使用)
+Free lists 有不同的 size class，分别属于不同的 size 范围。
+
+分配内存：从一个最小的并且合适的 size class 找起，如果找不到，到下一个更大的 size class 找。
+找到了之后需要进行 split，并把剩下的 free block 插入到合适大小的 free list 中去。
+
+释放内存：要 coalescing，并把聚合之后的 free list 插入到大小合适的 free list 中去。
+
+### Buddy Systems
+Segregated fits 的一种特殊情况，每个 size class 的大小是 a power of 2。
