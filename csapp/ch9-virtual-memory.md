@@ -449,3 +449,40 @@ Free lists 有不同的 size class，分别属于不同的 size 范围。
 
 ### Buddy Systems
 Segregated fits 的一种特殊情况，每个 size class 的大小是 a power of 2。
+
+# 9.10 Garbage Collection
+自动把程序中不会再被用到的 blocks 释放掉。
+
+## 9.10.1 Garbage Collector Basics
+*Reachability grash* (Figure 9.49)：
+图中有两种节点 *root nodes* 和 *heap nodes*。
+Root nodes 对应的是不在 heap 中的位置，但是有指针指向 heap 中的某个位置。
+节点 p 指向节点 q 表示 p 中有指针指向 q 中的某一个位置。
+
+节点 p 是可达的：有一条从 root 节点到 p 的路。
+
+节点 p 不可达表示这一块 block 是 garbase，需要被搜集。
+
+Garbage Collector 可以使用一个单独的 thread 去跑，也可以 on demand。
+
+比如 (Figure 9.50)，当 `malloc` 函数被调用时且无法找到 free block 时，则进行垃圾搜集；
+找到垃圾时，进行 `free` (所以 `free` 函数是 collector 调用的而不是 application)。
+
+## 9.10.2 Mark&Sweep Garbage Collectors
+两阶段：先把所有可达的节点 mark (*mark phase*)，然后把所有未被 mark 的 block 释放掉 (*sweep phase*)。
+
+Figure 9.51: 算法伪代码。
+Figure 9.52: 例子
+
+## 9.10.3 Conservative Mark&Sweep for C Pgrograms
+C 实现 Mark&Sweep 的困难:
+
+1. 一块 memory 没有类型信息，所以无法判断数据的类型是否是指针
+2. 不太容易判断指针指向的位置是否属于 heap。
+
+为了解决第二个困难，可以把所有被分配的 block 组织成 balanced binary search tree (Figure 9.53)。
+地址小的在左边，地址大的在右边。
+通过搜索 binary tree，比较 address 和 block size 来判断地址是否在 heap 中。
+
+Conservasive: 由于不能判断数据类型，可能把某些不是指针的数据误判为指针，
+而这个数据所代表的地址又恰好指向某一块 heap block，就会导致错误地 mark 这一块 block。
