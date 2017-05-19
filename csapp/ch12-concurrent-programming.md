@@ -77,13 +77,60 @@ Thread is a logical flow that runs in the context of a process.
 但是一个进程里所有的 thread 都共享 virutal address space。
 
 ## 12.3.1 Thread Execution Model
+*Main thread*: 每一个进程开始执行的那个 thread。
+
+*Peer thread*: 后续创建的 thread。
+
+Figure 12.12: concurrent thread execution
+
+Thread 的 context switch 开销更小，因为 virtual address space 是一样的，不需要 flush cache, TLB。thread 主要是重置 CPU 寄存器。
+
+任何一个 peer thread 都可以 kill 任何一个其它的 peer thread。
+
 ## 12.3.2 Posix Threads
+Figure 12.13 例子
+
 ## 12.3.3 Creating Threads
+P988: `pthread_create` 函数原型
+
+`pthread_self` 可以得到自己的 thread 的 `tid`。
+
+
 ## 12.3.4 Terminating Threads
-## 12.3.5 Reaping Terminated Threads
+两种方式：
+
+1. 当 thread routine 返回时
+2. 调用 `pthread_exit` 函数。当 main thread 调用这个函数时，它会等待所有的 peer thread 结束，然后结束 main thread 和整个进程。
+3. 任何一个 peer thread 调用 `exit` 函数，都会结束整个进程
+4. 其他的 peer thread 调用 `pthread_cancle` 来结束本线程
+
+
+## 12.3.5 Reaping (收割) Terminated Threads
+`pthread_join` 函数等待其他的线程结束，并且 *reaps* 结束的线程所用的内存资源。
+
 ## 12.3.6 Detaching Threads
+任何一个线程，要么需要通过 `pthread_join` 函数来 reap memory resource，要么通过 `pthread_detach` 函数来 detach 线程。
+
+Thread 有两种状态： `joinable` 和 `detached`。
+Joinable thread can be reaped and killed by other threads。
+Joinable thread 的内存资源 are not freed until it is reaped by another thread。
+
+A detached thread cannot be reaped or killed by other threads. Its memory resources are *freed automatically* by the system when it terminates.
+
+一开始 thread 是 joinable 的，可以通过 `pthread_detach` 函数将进程转换为 detached。
+
 ## 12.3.7 Initializing Threads
+`pthread_once` 函数常用于初始化一些全局变量。
+
+`pthread_once` 函数被调用时，它会调用 `init_routine` 函数 (`pthread_once` 的一个参数)。
+
+在多线程编程环境下，`pthread_once` 调用会出现在多个线程中，
+`init_routine` 函数仅执行一次，究竟在哪个线程中执行是不定的，是由内核调度来决定。
+
+
 ## 12.3.8 A concurrent Server Based on Threads
+Figure 12.14
+
 # 12.4 Shared Variables in Threaded Programs
 ## 12.4.1 Threads Memory Model
 ## 12.4.2 Maping Variables to Memory
