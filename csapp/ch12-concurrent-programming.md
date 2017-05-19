@@ -133,8 +133,24 @@ Figure 12.14
 
 # 12.4 Shared Variables in Threaded Programs
 ## 12.4.1 Threads Memory Model
+一个 thread 不能访问和更改另外一个 thread 的寄存器。
+但是由于不同 thread 的 virutal address space 是一样的，
+一个 thread 对虚拟内存中某一个位置的更改，其它 thread 都能感知得到。
+
+由于每个 thread 都有自己的 stack，所以一般来讲不同 thread 是相互独立的。
+但是，由于不同 thread 是共享 virtual address space 的，如果非要访问其它 thread 的 stack，也是能做到的。
+
 ## 12.4.2 Maping Variables to Memory
+三种方式：
+
+1. 全局变量：在虚拟内存中的 read/write area，整个进程只有一个 instance。
+2. *Local automatic variables*: 在 thread 自己的 stack 中。
+3. *Local static variables*: 可以在 thread routine 中被定义，但是也存在于 read/write area of virtual memory，
+且虽然在不同的 thread routine 都可以定义，但是只有一个 instance。
+
 ## 12.4.3 Shared Variables
+没什么干货
+
 # 12.5 Synchronizing Threads with Semaphores
 ## 12.5.1 Progress Graphs
 ## 12.5.2 Semaphores
