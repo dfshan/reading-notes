@@ -305,8 +305,31 @@ Programs with high efficiency are spending less time synchronizing and communica
 
 # 12.7 Other Concurrency Issues
 ## 12.7.1 Thread Safety
+A function is said to be *thread-safe* if and only if it will always produce corrent results when called repeadly from multiple concurrent threads.
+
+四类 thread-unsafe 函数：
+
+1. Functions that do not protect shared variables
+2. Functions that keep state accross multiple invocations (调用). 例子 Figure 12.37。
+3. Functions that return a pointer to a static variable. 例如 `ctime` 和 `gethostbyname`。
+因为被其他 thread 调用时，static 变量会被 overwritten。
+4. Functions that call thread-unsafe functions.
+
 ## 12.7.2 Reentrancy
+*Reentrant functions* do not reference any shared data when they are called by multiple threads.
+这样的函数效率更高，因为不需要 synchronization。
+
 ## 12.7.3 Using Existing Library Functions in Threaded Programs
+Standard C library 里面的一些 thread-unsafe 函数。比如 `rand` 函数。
+见 Figure 12.41。
+
 ## 12.7.4 Races
+A *race* occurs when the correctness of a program depends on one thread reaching point *x* in its control flow *before* another thread reaches point *y*.
+
+Example: Figure 12.42 & 12.43.
+
 ## 12.7.5 Deadlocks
+在使用 semaphores 时，一下的原则可以避免 deadlock:
+
+*Mutex lock ordering rule*: Given a total ordering of all mutexes, a program is deadlock free if each thread acquires its mutex in order and releases them in reverse order.
 
