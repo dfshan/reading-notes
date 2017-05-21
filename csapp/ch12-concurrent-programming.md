@@ -283,6 +283,67 @@ Writer:
 代码见 Figure 12.28。
 
 
+## 补充资料
+除了 semaphore 之外，还有一种 synchronization 的方法叫 *conditional variable*。
+
+
+两个概念：
+
+* 当某些条件不满足时，thread 会在一个 waiting queue 中等待
+* 其它的 thread 可以唤醒 waiting queue 中等待的 threads
+
+更严谨的定义：
+> A *conditional variable* an **explicit queue** that threads can put themselves on when some state of execution
+> (i.e., some condition) is not as desired (by waiting on the condition);
+> some other thread, when it changes said state, can then **wake** one (or more)
+> of those waiting threads and thus allow them to continue (by signaling on the condition).
+
+
+相关函数:
+
+* `pthread_cond_wait(&cond, &mutex)`: `cond` 是一个 conditional variable, `mutex` 是一个 mutex(lock)。
+函数执行过程：
+	- 被调用时:
+		1. 释放 `mutex` 锁
+		2. 把当前 thread 加入 `cond` 的 waiting queue
+		3. sleep this thread
+	- 被唤醒时: 重新获得 `mutex`
+* `pthread_cond_signal(&cond)`：唤醒至少一个处于 `cond` 的等待队列中的 thread
+* `pthread_cond_broadcast(&cond)`：唤醒所有处于 `cond` 的等待队列中的 threads
+
+例子：producer-consumer
+
+	cond_t qempty, qfull;
+	mutex_t mutex;
+
+	void *producer(void *arg) {
+		int i;
+		for (i = 0; i < loops; i++) {
+			pthread_mutex_lock(&mutex);
+			while (buffer is full) {
+				pthread_cond_wait(&qfull, &mutex);
+			}
+			Put items into buffer
+			pthread_cond_signal(&qempty);
+			pthread_mutex_unlock(&mutex);
+		}
+
+	}
+
+	void *consumer(void *arg) {
+		int i;
+		for (i = 0; i <  loops, i++) {
+			pthread_mutex_lock(&mutex);
+			while (buffer is empty) {
+				pthread_cond_wait(&qempty, &mutex);
+			}
+			Get items from buffer
+			pthread_cond_signal(&qfull);
+			pthread_mutex_unlock(&mutex);
+		}
+	}
+
+
 # 12.6 Using Threading for Parallelism
 A parallel program is a concurrent program running on multple processors.
 
@@ -332,4 +393,3 @@ Example: Figure 12.42 & 12.43.
 在使用 semaphores 时，一下的原则可以避免 deadlock:
 
 *Mutex lock ordering rule*: Given a total ordering of all mutexes, a program is deadlock free if each thread acquires its mutex in order and releases them in reverse order.
-
