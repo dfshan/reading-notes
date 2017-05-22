@@ -533,3 +533,33 @@ P874 例子
 忘记释放内存
 
 P875 例子
+
+# Appendix 1: Linux 内核中的寻址
+Linux 进程的虚拟地址布局
+![Virtual memory of a Linux process](static/vm-struct.jpg)
+
+x86-32 系统中，内核虚拟地址分为两个部分：
+
+1. LOWMEM: 0-896MB, 分为两个部分：
+	1. ZONE_DMA: 0-16MB
+	2. ZONE_NORMAL: 16MB-896MB (880MB)
+2. HIGHMEM, 896MB-1024MB, 包含一下部分
+	3. ZONE_HIGHMEM: 896MB-1024MB (128MB)
+
+寻址方式分为两种情况，1). 物理内存大小小于 1GB; 2). 物理内存大小大于 1GB
+
+对于第一种情况，内核虚拟地址空间能就能访问到所有的内存，所以虚拟地址通过线性映射转换为物理地址：
+
+	physical address = virtual address - PAGE_OFFSET (PAGE_OFFSET = 0xc000 0000 in x86-32)
+
+对于第二种情况，LOWMEM 的地址通过线性映射转换为物理地址，HIGHMEM 则不然。
+
+HIGHMEM 的地址可能需要通过分配和释放的方式，来映射到整个物理内存中 (如使用 page table)
+
+Note: 对于 64 位系统，所有的虚拟地址都通过线性映射转换为物理地址。
+
+参考资料：
+
+* [http://events.linuxfoundation.org/sites/events/files/slides/elc_2016_mem_0.pdf](http://events.linuxfoundation.org/sites/events/files/slides/elc_2016_mem_0.pdf)
+* [http://blog.csdn.net/hanzy0823/article/details/11979407](http://blog.csdn.net/hanzy0823/article/details/11979407)
+* [http://learnlinuxconcepts.blogspot.com/2014/02/linux-addressing.html](http://learnlinuxconcepts.blogspot.com/2014/02/linux-addressing.html)
