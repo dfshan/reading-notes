@@ -221,3 +221,41 @@ L1 caches 往往采用低 associativity，低层的 memory 往往使用高 assoc
 Write-through 更易于实现。
 
 使用 write-back 可导致更少的传输次数。越低层的 memory 越有可能采用 write-back，因为传输一次数据所需要的时间更长。
+
+# 6.5 Writing Cache-Friendly Code
+Basic approach:
+
+1. *Make the common case go fast.*:
+程序的大部分执行时间往往集中在少数的几个核心函数。
+而核心函数的大部分执行时间往往花费在某几个 loop 上。所以集中优化核心函数的 inner loop 会非常有效。
+2. *Minimize the number of cache misses in each inner loop.*
+故名思议。
+
+看懂 P635 和 P636 两段程序即可。
+
+下面两段程序中，局部变量 `i`, `j`, `sum` 有良好的 temporal locality。
+由于它们是局部变量，因此complier 往往会将它们存储在寄存器中。
+
+第一段程序的 spatial locality 更好。
+
+```c
+int sumvec(int a[M][N])
+{
+    int i, j, sum = 0;
+    for (i = 0; i < M; i++)
+        for (j = 0; j < N; j++)
+            sum += v[i][j];
+    return sum;
+}
+```
+
+```c
+int sumvec(int a[M][N])
+{
+    int i, j, sum = 0;
+    for (j = 0; j < N; j++)
+        for (i = 0; i < M; i++)
+            sum += v[i][j];
+    return sum;
+}
+```
