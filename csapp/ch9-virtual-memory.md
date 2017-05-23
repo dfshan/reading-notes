@@ -13,6 +13,7 @@ PS: Virtual page 和 physical page (page frame) 一般大小一样。
 2. DRAM cache 是 fully associative 的：任何一个虚拟页都能放在任何一个物理页当中。
 3. OS 会使用非常复杂的页替换策略（比 SRAM Cache 的替换策略要复杂得多）
 4. DRAM cache 一般使用 write-back，而不是 write-through
+(所以强制关机有可能会导致数据丢失)
 
 ## 页表
 页表是常驻于物理内存的一个表格，页表中的每一个表项记录着一个 page 的信息：

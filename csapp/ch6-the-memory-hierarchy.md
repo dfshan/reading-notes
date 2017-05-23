@@ -76,3 +76,148 @@ Cache 管理由谁来做：
 
 * 利用 temporal locality: 同一个数据被多次重复使用，会比较快，因为数据已经在 cache 中了
 * 利用 spatial locality: 一个 block 可能包含多个数据，把一个 block 拷贝进 cache 之后，访问 block 里面的其他数据也会更快
+
+# 6.4 Cache Memories
+## 6.4.1 Generic Cache Memory Organization
+Figure 6.25: cache 的结构：
+总共有 \\(S=2^s\\) 个 sets，每个 set 有 \\(E\\) cache lines。
+每个 Cache line 有一位 valid bit，表示这个 line 是否包含 meaningful information；
+Cache line 还包含 \\(t\\) 位的 Tag 标志，然后是一个 \\(B=2^b\\) Bytes 的数据。
+
+CPU 从 Cache 读取数据时，一个地址被切分成 Figure 6.25(b) 所示的几个部分。
+首先根据 s 位的 set index 找到对应的 set，然后根据 tag bits 进行匹配，看是否有某一个 line 能匹配上 tag 并且 valid bit = 1.
+最后，更具 block offset bits 来找到对应的数据。
+
+思考：为什么前 t bits 是 tag ? 如果前几个 bits 是 set index，那么一段连续的数据会被映射到同一个 set，如果 \\(S > E\\)，则可能发生频繁的 conflict miss。
+
+## 6.4.2 Direct-Mapped Caches
+每个 set 仅包含一个 line 的 cache 叫做 *direct-mapped cache*。
+
+### Set Selection in Direct-Mapped Caches
+如 Figure 6.28 所示，从 address 中把 s 位的 set index 提取出来，用于选择 set。
+
+### Line Matching in Direct-Mapped Caches
+如 Figure 6.29 所示，如果下面两个条件都满足，则 Cache hit:
+
+* valid bit = 1
+* 从 address 中提取的 tag 和 cache line 中的 tag 吻合
+
+
+### Word Selection in Direct-Mapped Caches
+如 Figure 6.29 所示，提取出 byte offset，读出相应的数据
+
+### Line Replacement in Direct-Mapped Caches
+如果发生了 cache miss，则从下一级 memory 中把 block 读入，并且写入到 cache 相应的位置。
+
+### Putting It Together: A Direct-Mapped Cache in Action
+Just read the example
+
+### Conflict Misses in Direct-Mapped Caches
+Conflict misses in derect-mapped caches typically occur when program access arrays whose sizes are a power of 2.
+
+例子 P622.
+
+## 6.4.3 Set Associative Caches
+Direct-mapped caches 的 conflict miss 比较严重，所以有了 set associative caches。
+
+\\(E\\)-way set asssociative cache: \\(E\\) lines per set.
+
+Figure 6.32: two-way set associative cache
+
+### Set Selection in Set Associative Caches
+同上 (Figure 6.33)
+
+### Line Matching and Word Selection in Set Associative Caches
+根据地址的 tag，比较 set 里面每一个 cache line，如果某一行的 valid bit = 1 且 tag 相同，则 cache hit.
+
+Figure 6.34: an example.
+
+
+### Line Replacement on Misses in Set Associative Caches
+当发生 cache miss 时，需要从下一级的 memory 读出的 block，根据 addresss 选择一个 set，
+但是一个 set 有多个 cache line，应该放在哪一个 cache line 中：
+
+1. 如果有一行 cache line 是空的，则放入这一行
+2. 随机选择一行，适用于 cache miss 代价不大的情况下
+3. 选择 least frequently used (LFU) 的一行，需要额外的时间和硬件
+4. 选择 least recently used (LRU) 的一行，需要额外的时间和硬件
+
+## 6.4.4 Fully Associative Caches
+\\(E=\frac{C}{B}\\) (\\(C\\): cache size, \\(B\\): block size)
+
+只有一个 set，Figure 6.35.
+
+### Set Selection in Fully Associative Caches
+由于只有 1 个 set，所以不需要选择 set，address 里面有没有 set index。(Figure 6.36)
+
+### Line Matching and Word Selection in Fully Associative Caches
+同上，Figure 6.37.
+
+Cache 电路需要并行地对多个 cache line 的 tag 与 address 中提取出来的 tag 进行比较，所以 it is difficult and expensive.
+
+所以这种 cache 适用于 small caches，比如 TLB 和 cache page table entries.
+
+## 6.4.5 Issues with Writes
+Read:
+
+1. 通过 address 在 cache 中查找相应的 block
+2. Hit, 返回数据
+3. Miss, 从 next lower level of memory hierarchy 中读取 block，然后存储在 cache 中的某一行中。
+
+Write:
+第一种情况，要写的数据在 cache 中，也称为 write hit，写入 cache 之后，何时去更新下一级的 memory?
+
+* **Write-through**: 马上更新
+* **Write-back**: 不马上更新，直到这个 cache block 需要被替换掉时才更新，需要有一个 *dirty bit* 来说明这个 cache block 是否被更新过
+
+第二种情况，要写的数据不在 cache 中，也就是 write miss。怎么办？
+
+* **Write-allocate**: 先把 data block 从下一级 memory 中读到 cache 中，再写；Write-back caches 一般用这种方法
+* **No-write-allocate**: 绕过 cache，直接写到下一级 memory 中；Write-through caches 一般用这种方法
+
+程序员些程序时，最好假设 write-allocate, write-back caches，因为：
+
+1. 越低层的 memory 越有可能使用 write-back，这是因为数据传输时间长
+2. 随着 logic density 的增加，write-back 所带来的相对复杂度变得越来越小
+3. 和 read 操作对称，都 exploit locality
+
+## 6.4.6 Anatomy (解剖) of a Real Cache Hierarchy
+*i-cache*: a cache that holds instructions only
+
+*d-cache*: a cache that holds program data only
+
+*unified cache*: a cache that holds both instructions and data
+
+现在的处理器往往采用独立的 i-cache 和 d-cache，原因：
+
+1. 处理器可以同时读取 instruction 和 data
+2. i-cache 是只读的，因此更简单。两种 cache 可以根据不同的 access pattern 进行优化，有不一样的 block sizes, associativities, capacities
+3. 减少 data access 和 intruction access 的 conflict misses (但是可能是以增加 capacity miss 为代价的)
+
+## 6.4.7 Performance Impact of Cache Parameters
+衡量 cache 性能的指标：
+
+* *Miss rate*: \\(# misses / # references\\)
+* *Hit rate*: \\(1 - miss rate\\)
+* *Hit time*: 从 cache 传输一个 word 到 CPU 的时间，包括 set selection, line identification, word selection
+* *Miss penalty*: 由于 cache miss 导致的额外处理时间
+
+### Impact of Cache Size
+Cache Size 越大，hit rate 越高，但是往往 hit time 会越低
+
+### Impact of Block Size
+Block size 越大，对于 spatial locality 比较好的 program 来说 hit rate 越高。
+但是对于 temporal locality 比 spatial locality 更好的 program 来说 hit rate 可能会变低。
+因为 cache line 变少了 (假设 cache size 是一定的)。
+
+并且 block size 越大，transfer time 越长，因此 miss penalty 越大。
+
+### Impact of Associativity
+Associativity 越高，conflict miss 发生的可能性越低，cost 越大，复杂性越高，因此 hit time 越长，miss penalty 越大（选择 victime line 的逻辑更复杂）。
+
+L1 caches 往往采用低 associativity，低层的 memory 往往使用高 associative，因为 miss penalty 更严重。
+
+### Impact of Write Strategy
+Write-through 更易于实现。
+
+使用 write-back 可导致更少的传输次数。越低层的 memory 越有可能采用 write-back，因为传输一次数据所需要的时间更长。
