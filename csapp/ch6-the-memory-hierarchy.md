@@ -259,3 +259,35 @@ int sumvec(int a[M][N])
     return sum;
 }
 ```
+
+# 6.6 Putting It Together: The Impact of Caches: on Program Performance
+
+## 6.6.1 The Memory Mountain
+这一节探究了 temporal locality 和 spatial locality 和 read throughput 的关系。其中，read throughput 为单位时间一个程序读取的数据量，用 MB/s 来衡量。
+
+使用的程序如 Figure 6.40 所示。
+程序里有两个变量：`size` 和 `stride`。`size` 表示读取的总数据量，即 work set size；`stride` 表示循环的 step size。
+`size` 体现的是 temporal locality: `size` 越小，temporal locality 越好。
+`stride` 体现的是 spatial locality: `stride` 越小，spatial locality 越好。
+
+不同的 `size` 和 `stride` 会导致不同的 read throughput。以 `size` 和 `stride` 为自变量，read throughput 为因变量的函数称为 *memory moutain*。
+
+Figure 6.40 程序所产生的 memory moutain 如 Figure 6.41 所示。
+
+单独研究 `size` 和 `stride` 对 read throughput 的影响，如 Figure 6.42 和 Figure 6.43 所示。
+
+## 6.6.2 Rearranging Loops to Increase Spatial Locality
+本节通过一个例子来说明如何提升 spatial locality。
+
+所举的例子是矩阵相乘。
+共有 6 种实现方式，如图 Figure 6.44 所示。
+对 cache 的假设在 P644 页中间，每种实现方式的 cache miss 估计如 Figure 6.45 所示。
+
+这 6 种实现方式的 performance 如 Figure 6.46 所示。最好情况下的性能比最差情况下的性能好 40 倍。
+
+## 6.6.3 Exploiting Locality in Your Program
+建议：
+
+* Focus your attention on the inner loops, where the bulk of the computations and memory accesses occur.
+* Try to maximize the spatial locality in your program by reading data objects sequentially, with stride 1, in the order they are stored in memory.
+* Try to maximize the temporal locality in your programs by using a data object as often as possible once it has been read from memory
