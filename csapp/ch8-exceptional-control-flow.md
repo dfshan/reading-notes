@@ -154,7 +154,154 @@ The `sleep` function suspends a process for a specified period of time
 
 `execve` is called once and never returns. (只有发生了错误时才会 return，比如 unable to find `filename`)
 
-### 8.4.6 Using `fork` and `execve` to Run Programs
+## 8.4.6 Using `fork` and `execve` to Run Programs
 Unix shell 和 web server 会频繁地调用 `fork` 和 `execve` 函数。
 
 Figure 8.23, 8.24, 8.25: 一个简单的 shell 程序。
+
+# 8.5 Signals
+Figure 8.26 Linux Signals
+
+## 8.5.1 Signal Terminology
+*Sending a signal*: Kernel sends a signal to a destination process by updating some state in the context of the destination process.
+
+*Receiving a signal*: A destination process receives a signal when it is forced by the kernel to react in some way to the delivery of the signal. 如 Figure 8.27 所示。
+
+任何时刻，最多只能有一个某种特定类型的 signal
+
+## 8.5.2 Sending Signals
+### Process Groups
+任何一个进程都属于一个 process group。Process group ID 可以通过 `getpgrp` 函数获得。
+
+默认情况下，子进程和父进程的 group 是一样的，但是可以通过 `setpgid` 函数来更改本进程所属的 group。
+
+### Sending Signals with the `/bin/kill` Program
+可以通过 `kill -<signal> <process id>` 命令来给进程发送 signal。
+
+可以通过 `kill -<signal> -<process id>` 命令来 process group 发送 signal。
+
+### Sending Signals from the Keyboard
+通过 `jobs` 查看 background jobs.
+
+输入 `Ctrl+C` 会使 kernel 给所有的 foreground process group 发送 SIGINT 信号
+
+输入 `Ctrl+Z` 会使 kernel 给所有的 foreground process group 发送 SIGTSTP 信号
+
+### Sending Signals with the `kill` Function
+一个进程可以通过 `kill` 函数来给另外一个进程发送信号
+
+### Sending Signals with the `alarm` Function
+`alarm` 也称为闹钟函数。
+`alarm()` 用来设置信号 SIGALRM 在经过参数 seconds 指定的秒数后传送给目前的进程。
+如果参数 seconds 为0，则之前设置的闹钟会被取消，并将剩下的时间返回。
+要注意的是，一个进程只能有一个闹钟时间，如果在调用alarm之前已设置过闹钟时间，
+则任何以前的闹钟时间都被新值所代替。
+
+## 8.5.3 Receiving Signals
+当前 kernel 把一个进程从内核态切换为用户态时，它会检查当前进程的 unblocked pending signals。
+
+如果没有这样的 signal，那么从下一条指令开始执行。
+
+如果有这样的 signal，那么选择一个 signal \\(k\\) (一般选择最小的 \\(k\\)) 执行。
+
+进程收到 signal 之后，会进行一些操作。进程执行完操作以后，会从下一条指令开始执行。
+
+Figure 8.26 列举了一些 signal 的 default action.
+
+一个进程可以通过 `signal` 函数来更改 default action。
+
+Note: SIGSTOP 和 SIGKILL 的 default action 不能被更改。
+
+例子：Figure 8.30
+
+Signal handler 可以被其它 handler 中断，如 Figure 8.31 所示。
+
+## 8.5.4 Blocking and Unblocking Signals
+*Implicit blocking mechanism*: 如果当前进程正在处理一个 signal，那么 kernel 会把其他同一种类型的 pending signal 给 block 掉
+
+*Explicit blocking mechanism*: 可以使用 `sigprocmask` 来 block 和 unblock signals
+
+## 8.5.5 Writing Signal Handlers
+Writing signal handlers is difficult:
+
+1. Handlers 和 main program 是并行运行的，所以 handler 和 handler，
+以及 handler 和 main program 可能会发生冲突。
+比如同时对全局变量的读写，可能导致不可预测的结果。
+2. 何时以及如何接收 signal 常常是有悖常理的
+3. 不同的 system 可能有不同的 signal-handling semantics
+
+### Safe Signal Handling
+一些建议：
+
+1. Keep handlers as simple as possible
+
+2. Call only async-signal-safe functions in your handlers.
+什么叫 async-signal-safe? 就是这个函数可以被 safely called from a signal handler.
+什么样的函数是 async-signal-safe? reentrant (Section 12.7.2), 或者不能被其它的 signal handler 中断。
+Figure 8.33 列举了一些 system-level safe functions.
+
+3. Save and restore `errno`.
+Handler 和其它函数可能同时需要使用 `errno`，
+为了避免冲突，最好是把 `errno` 存在一个局部变量中，函数返回时再重新 restore。
+
+4. Protect accesses to shared global data structures by blocking all signals.
+如果确实需要访问共享的数据结构，要先把其它所有的 signal blcok 掉，
+否则在访问共享数据结构的同时，可能被其它 handler 中断，导致不可预测的结果。
+
+5. Declare global variables with `volatile`.
+如果 handler 中更新了全局变量，main program 可能不知道，因为这个全局变量可能在 cache 在寄存器中。
+`volatile` 会使 complier 从内存中读取变量，而不是从 cache 中。
+6. Declare flags with `sig_atomic_t`. 对 `sig_atomic_t` 类型的变量的读和写都是 atomic (uninterruptible) 的。
+
+### Correct Signal Handling
+Signals cannot be used to count the occurrence of events in other processes.
+Existence of a pending signal merely indicates that *at least* one signal has arrived.
+如果有多个相同类型的 signal 同时到来，那么进程可能只收到一个 signal.
+
+为什么？进程是否收到 signal 通过 `pend` bit 来查看，`peng` bit 只有一位，指示是否收到，而不是收到多少个。
+
+例子：Figrure 8.36: 每收到一个 SIGCHLD 信号，reap 一个子进程，但是发送三个 SIGCHLD 信号，可能只 reap 两个子进程。
+
+### Portable Signal Handling
+不同的系统可能有不同的 signal-handling semantics.
+
+可以通过 `sigaction` 函数来指定 signal-handling semantics.
+由于 `sigaction` 需要操作复杂的数据结构，所以比较笨重。
+所以 Figure 8.38 提供了一个包装函数 (wrapper function)。
+
+## 8.5.6 Synchronizing Flows to Avoid Nasty Concurrrency Bugs
+Figure 8.39: 该程序可能由于 race 导致 unexpected result.
+即 `deletejob` 可能在 `addjob` 之前被调用。
+
+Figure 8.40: 消除 race 的一种方法。
+
+## 8.5.7 Explicitly Waiting for Signals
+有的 program 比如 shell, 在创建子进程之后，需要等待子进程结束，然后 reap 子进程。
+
+Figure 8.42 展示了如何使用 `sigsuspend` 函数来实现这种功能。
+
+# 8.6 Nonlocal Jumps
+Nonlocal jumps is a user-level exceptional control flow,
+which can transfer control directly from one function to another (w/o call-and-return).
+
+有什么用？
+1. immidiate return from a deeply nested function call. (例子：Figure 8.43)
+2. 当收到一个 signal 时，执行另外一段代码，而不是从中断的地方开始执行。(例子：Figure 8.44)
+
+`setjmp` 和 `longjmp` 函数:
+
+`setjmp`: 进行设置，该函数返回时可能有两种情况:
+一是正常情况，也就是该函数被调用时，正常返回，返回值为0。
+不正常的地方在于，当下面的代码调用 `longjmp` 函数时，该函数也会返回，返回值由 `longjmp` 设置。
+该函数会把 calling environment 存到 `env` buffer 里。
+
+
+`longjmp`: 直接跳转到 `setjmp` 的位置。跳转之前从 `env` buffer 里恢复 calling environment.
+
+
+# 8.7 Tools for Manipulating Processes
+
+* `strace`: 跟踪进程中的系统调用
+* `ps`, `top`
+* `pmap`: Displays the memory map of a process
+* `/proc`: Exports kernel data structures
