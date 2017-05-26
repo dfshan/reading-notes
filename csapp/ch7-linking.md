@@ -220,7 +220,8 @@ Static libraries 有两个缺点：
 因此有了 shared library 的概念。
 Shared library 在 run time 或者 load time 才会被 load 到 memory 里 并进行 linking。
 这个过程叫 *dynamic linking*。
-在 Linux 中，shared library 又叫 *shared objects*，是以 `.so` 结尾的文件；
+在 Linux 中，shared library 又叫 *shared objects*，是以 `.so` 结尾的文件，
+例如 C standard library `libc.so`；
 在 Windows 中，shared library 叫 dynamic link libraries (DLL).
 
 创建 shared library:
@@ -255,12 +256,80 @@ Linux interfaces:
 例子 Figure 7.17
 
 # 7.12 Position-Independent Code (PIC)
+Shared library 中 symbol 的 run-time memory address 在 linking 的时候是不确定的，
+同一模块内部的 address 可以使用 PC-relative addressing 来实现
+(shared library 中的 code segment 和 data segment 是大小是固定的，所以相对偏移地址也是可以确定的)，
+但是 references to external procedures and global variables 需要使用 PIC.
 ### PIC Data References
+Figure 7.18: data segment 的起始部分有一张 global offset table (GOT)，
+这个 module 里面 reference 的每一个 procedure or global variable
+都在这张表里面的有一项对应的表项。
+At load time, dynamic linker relocates each GOT entry so that it contains the absolute address of the object.
+该图中，PIC 所使用的地址是相对于当前指令的相对地址，该地址指向 GOT 表中的一项，
+而表项的内容就是 `addcnt` 的地址。
+
 ### PIC Function Calls
+GNU compilation 使用了一种叫 *lazy binding* 的技术。
+基本思想是当第一次调用 shared library 里面的函数时，
+程序会通过 dynamic linker 来确定这个函数的地址，然后再调用这个函数。
+后续调用同样的函数就不需要 dynamic linker 了，因为这个函数的地址已经被存在一张表格当中了。
+
+具体的实现方法见 P706.
+
 # 7.13 Library Interpositioning
+Library interpositioning 是一种可以劫夺 shared library 里函数的一种方法，把函数替换成自己的 code.
+Interpositioning 可以发生在 compile time, link time, **or** runtime.
+
+例子：Figure 7.20(a) 中的程序调用了 `malloc` 和 `free` 函数，
+接下来通过 interpositioning 来跟踪 malloc and free 的调用。
+
 ## 7.13.1 Compile-Time Interpositioning
+如 Figure 7.20 所示。
+在 `malloc.h` 和 `malloc.c`	中定义和标准库函数中的 `mallc` 和 `free` 函数一样的函数。
+编译时使用下面的命令：
+```shell
+linux> gcc -DCOMPILETIME -c mymalloc.c
+linux> gcc -I. -o intc int.c mymallo.c
+```
+上面的命令中，`-DCOMPILETIME` 定义了一个 macro `COMPILETIME`。为什么要这么做，看 Figure 7.20(c) 第一行。
+
+`-I.` 参数告诉 C preprocessor to look for `malloc.h` in the current directory before looking in the usual system directories.
+
 ## 7.13.2 Link-Time Interpositioning
+Linux static linker 可以通过 `--wrap f` 参数来实现 link-time interpositioning.
+这个参数的含义是把 symbol `f` 解析为 `__wrap_f`，而把 `__real_f` 解析为 `f`。
+
+例子：Figure 7.21。
+编译时使用如下命令：
+```shell
+linux> gcc -DLINKTIME -c mymalloc.c
+linux> gcc -c int.c
+```
+Linking 时使用如下命令：
+```shell
+linux> gcc -Wl,--wrap,malloc -Wl,--wrap,free -o intl int.o mymalloc.o
+```
+上面的命令中 `-Wl,` 表示后面跟着的是要传给 linker 的 options。
+所有的逗号会被空格取代。
+因此，`-Wl,--wrap,malloc` 相当于给 linker 传了参数 `--wrap malloc`。
+
 ## 7.13.3 Run-time Interpositioning
+通过一个环境变量 `LD_PRELOAD` 来实现，这个环境变量是一些裂 shared library 的路径，
+在 load and execute a program 时，dynamic linker 会优先搜索 `LD_PRELOAD` 内的 shared library。
+
+例子，Figure 7.22.
+编译时使用如下命令
+```shell
+linux> gcc -DRUNTIME -shared -fpic -o mymalloc.so mymalloc.c -ldl
+linux> gcc -o intr int.c
+```
+Note: `-ldl` 指示连接器连接一个库。这个库里包含了 dlopen, dlsym 等等的函数。也就是说，是支持在运行时加载使用动态连接库的函数库。
+
+运行程序:
+```shell
+LD_PRELOAD="./mymalloc.so" ./intr
+```
+
 # 7.14 Tools for Manipulating Object Files
 一些工具：
 
