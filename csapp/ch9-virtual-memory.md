@@ -242,7 +242,7 @@ Linux 使用 disk 中的 *object* 来初始化一块虚拟内存 area 的过程�
 Object 分为两种:
 
 * shared object: 映射到 shared object 的虚拟内存 area 也成为 *shared area*，一个进程对 shared area 进行修改时，其它进程也能看得到。
-* private object: 映射到 private object 的虚拟内存 area 称为 *private area*，一个进程对 private area 进行的修改，其它进程不能感知到。
+* private object: 映射到 private object 的虚拟内存 area 称为 *private area*，一个进程对 private area 进行的修改，其它进程不能感知到。对 private object 的写也不会真正地写到磁盘中。
 
 例子：
 Figure 9.29: 两个不同进程的虚拟内存被映射到同一个 shared object 中。
@@ -254,10 +254,13 @@ Private area 的页是 read-only 的，更具体地说，这一块 area struct �
 此时 fault handler 会 copy 这一个物理页到另一个物理页中，然后重新进行写操作。
 
 ## 9.8.2 The `fork` Function Revisited
-当一个进程创建新进程时，kernel 首先会创建进程的一些数据结构。
+当一个父进程创建子进程时，kernel 首先会创建进程的一些数据结构。
 然后，为新进程创建和当前进程一样的 mm_struct 结构体。
+也就是说，子进程所有的虚拟内存页面和父进程是共享的。
 
-接下来，就使用到了 private object：所有的页面都被标记为 read-only，并且两个进程中的每一个 area struct 都被标记为 copy-on-write。
+接下来，就使用到了 private object：
+所有的页面都被标记为 read-only，
+并且两个进程中的每一个 area struct 都被标记为 copy-on-write。
 
 可想而知，接下来只有当进程需要写页面时，才会创建新的页面。
 
@@ -270,7 +273,6 @@ Private area 的页是 read-only 的，更具体地说，这一块 area struct �
 
 1. 删除现有的 user areas
 2. 对 private area 进行 map:
-
 	* code 和 data areas 映射到 `a.out` 文件中的 `.text` 和 `.data` sections，标记为 copy-on-write
 	* bss area, stack area, heap area 都是 demand zero
 
@@ -295,14 +297,17 @@ Heap 由一些不同大小的 *blocks* 组成。
 有两种 *allocator*:
 
 * **显式 allocator**: 需要显式地分配和释放 blocks。比如 C 中的 `malloc` 和 `free`。
-* **隐式 allocator**: Allocator 需要检测出哪些 allocated block 不会再被用到了，然后自动地把这些 block 释放掉。这个过程也称为 *garbage collectors*。
+* **隐式 allocator**: Allocator 需要检测出哪些 allocated block 不会再被用到了，
+然后自动地把这些 block 释放掉。这个过程也称为 *garbage collectors*。
 
 ## 9.9.1 The `malloc` and `free` Functions
-In 32-bit mode (gcc -m32), `malloc` returns a block whose address is always a multiple of 8.
+In 32-bit mode (gcc -m32),
+`malloc` returns a block whose address is always a multiple of 8.
 
-In 64-bit mode (gcc -m64), `malloc` returns a block whose address is always a multiple of 16.
+In 64-bit mode (gcc -m64),
+`malloc` returns a block whose address is always a multiple of 16.
 
-`calloc`: 初始化动态内存
+`calloc`: 分配内存的同时初始化动态内存为 0
 
 `realloc`: 改变之前被分配的 block 的大小
 
@@ -322,7 +327,8 @@ Figure 9.34: 一个简单的例子
 1. 能处理任意顺序的 allocate 和 free 的请求:
 Allocator 不能事先假定 allocate 和 free 请求的顺序
 2. 马上对请求做出响应：
-Allocator 不能对请求进行重新排序或延迟对请求的处理(比如 coalescing)以提高性能。
+Allocator 不能暂时不回应请求，
+然后对多个请求进行重新排序或延迟对请求的处理(比如 coalescing)以提高性能。
 3. 只使用 heap:
 任何 nonscalar 数据结构都要存储在 heap 当中。
 4. 需要对 block 进行 align:
@@ -362,10 +368,11 @@ Figure 9.36 是整个 heap 的一个结构。heap 的最后一个 block 是一�
 遍历过程中可以搜索 free block。
 由于没有显示地把 free block 构造成为一个 list，所以称为 *implicit free lists*。
 
-**优点**: 简单， **缺点**: 找到一块合适的 free block 需要 O(n) 的时间。
+**优点**: 简单; **缺点**: 找到一块合适的 free block 需要 O(n) 的时间。
 
 Alignment requirement and minimum block size:
-假设 alignment 是 double-word，则每一块 block 的大小都必须是 9B 的倍数。另外，还可能需要 1 word 用来存储 header。
+假设 alignment 是 double-word，则每一块 block 的大小都必须是 8B 的倍数。
+另外，还可能需要 1 word 用来存储 header。
 
 ## 9.9.7 Placing Allocated Blocks
 在受到内存分配请求时，allocator 需要选择一块空闲内存来分配，有三种策略：
@@ -388,12 +395,16 @@ allocator 需要调用 `sbrk` 函数向内核申请新的内存，这一块内�
 如果有很多相邻的 free block，可能会导致 *false fragmentation* (Figure 9.38)，
 即有很多 available free memory，但是都被分成了很小的不够用的 free blocks。
 
-把这些 free blocks 聚合起来的过程叫 *coalescing*，分为 *immediate coalescing* (一个 block 被 free 了就 coalescing) 和 *deferred coalescing*。
+把这些 free blocks 聚合起来的过程叫 *coalescing*，分为 *immediate coalescing*
+(一个 block 被 free 了就 coalescing) 和 *deferred coalescing*。
 
-*Immediate coalescing*: 很直接，但是频繁地 coalescing 和 split 可能会导致 trashing。
+*Immediate coalescing*: 很直接，但是频繁地 coalescing 和 split 可能会导致 trashing
+(此 trashing 不是内存频繁地 swap in 和 swap out,
+而是 a block is repeatedly coalesced and then split soon thereafter)。
 
 ## 9.9.11 Coalescing with Boundary Tags
-对于一个 free block 而言，它想 coalescing 后面的 block 容易(直接找到后面的 block check 一下是不是 free)，
+对于一个 free block 而言，它想 coalescing 后面的 block 容易
+(直接找到后面的 block check 一下是不是 free)，
 但是想 coalescing 前面的 block 就不太容易了，问题类似于单向链表找 previous node。
 
 *Boundary tags* (by Knuth)：在每一个 block 中加一个 *footer* (boundary tag)。
@@ -422,10 +433,10 @@ Implicit free list 的 block allocation time 是线性的，不适用于 general
 
 *Explicit free lists*: 把 free blocks 通过双向链表连接起来，如 Figure 9.48 所示。
 
-在释放 block 的时候，需要把 free block 放入 free list 中，
-有两种策略，一种是把 free block 放入链表头部，这样简单但是 memory utilization 可能不高;
+在释放 block 的时候，需要把 free block 放入 free list 中， 有两种策略:
 
-另外一种是按 *address order* 来组织 free list，这样把 free block 插入 free list 可能需要线性的时间。
+* 把 free block 放入链表头部，这样简单但是 memory utilization 可能不高;
+* 按 *address order* 来组织 free list，这样把 free block 插入 free list 可能需要线性的时间。
 
 ## 9.9.14 Segregated Free Lists
 按不同的 free block 大小，把 free block 放入不同的 List 中存放。
