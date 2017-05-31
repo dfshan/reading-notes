@@ -7,9 +7,12 @@
 Compiler 只能对 program 进行 *safe* optimization：
 优化后的 program 和优化前的 program 有相同的 behavior.
 
-Memory aliasing (两个指针指向同一个 memory location) 导致的 unsafe optimizing:
+容易导致 unsafe optimizing 的两个原因：
 
-例子：
+  * memory aliasing: 两个指针指向同一个 memory location
+  * 函数内部调用全局变量
+
+例子：Memory aliasing (两个指针指向同一个 memory location) 导致的 unsafe optimizing:
 
 ```c
 void twiddle1(long *xp, long *yp) {
@@ -34,7 +37,7 @@ t1 = *q;
 上述程序中，`t1` 的值不一定是 1000.
 
 
-另外一个例子：函数内部更改全局变量
+2. 另外一个例子：函数内部更改全局变量
 ```c
 long f();
 long func1() {
@@ -74,7 +77,7 @@ long funclopt() {
   return t;
 }
 ```
-`GCC` 可以使用 `-finline` 或 `-O1` and higher 选项了使用这个优化。
+`GCC` 可以使用 `-finline` 或 `-O1` and higher 选项来使用这个功能。
 但是，`GCC` 仅仅对定义在同一个文件中的函数进行 inlining.
 
 # 5.2 Expressing Program Performance
@@ -111,10 +114,8 @@ Figure 5.7: 每次循环都要调用 `strlen` 函数，
 
 # 5.5 Reducing Procedure Calls
 由于编译器是非常保守的，它得保证代码的正确性。
-所以，在一段代码中，如果有函数调用，
-有的编译器 optimization 技术可能没办法进行。
-（为什么？对存在函数调用的优化可能产生的问题，
-例如 5.1 P500 例子）。
+所以，在一段代码中，如果有函数调用， 有的编译器可能不会对代码进行优化。
+（为什么？对存在函数调用的优化可能产生的问题，例如 5.1 P500 例子）。
 
 另外一方面，函数调用本身也会产生开销（比如参数压栈）
 所以，最好能减少函数调用的次数。
@@ -133,6 +134,7 @@ Figure 5.9 的 `combine2` 函数可以转换为 Figure 5.10 的 `combine3` 函�
 那么 `combine3` 和 `combine4` 可能会产生不同的结果。
 
 例子：P515, 下面两行代码的执行结果是不一样的：
+
 ```c
 combine3(v, get_vec_start(v) + 2);
 combine4(v, get_vec_start(v) + 2);
@@ -141,21 +143,20 @@ combine4(v, get_vec_start(v) + 2);
 # 5.7 Understanding Modern Processors
 Processor 的一个重要特性：
 instruction-level parallelism：
-100 多条指令同时执行，但是执行结果和每条指令单独执行的结果一样。
+100 多条指令同时执行，但是执行结果和每条指令顺序执行的结果一样。
 
 ## 5.7.1 Overall Operation
 非常详细地解释了现代处理器的工作过程。有时间可以仔细看看。
 重点需要掌握以下概念：
 
-Out-of-order 有两个模块:
+Out-of-order processor 有两个模块:
 
-1. Instruction control unit: 从 cache 中读取指令，
-把指令解析出来，作 prediction
+1. Instruction control unit: 从 cache 中读取指令， 把指令解析出来，做 prediction
 2. execution unit: 执行操作
 
-Speculative execution: 根据预测出一个分支，
-提前执行分支下的操作，如果分支预测正确，
-所有对寄存器的修改会被写入到寄存器中；
+Speculative execution: 根据预测出一个分支， 提前执行分支下的操作。
+在不知道分支预测是否正确之前，对内存和寄存器的修改不会被真正执行。
+如果分支预测正确， 所有对寄存器的修改会被写入到寄存器中；
 如果分支预测不正确，所有计算出来的结果都会被忽略掉，重置状态，重新执行。
 
 流水线：指令可以拆分成多个阶段，流水线执行
@@ -163,6 +164,9 @@ Speculative execution: 根据预测出一个分支，
 并行：一个处理器可能有多个处理模块，这样多个操作（比如加法）可以并行执行
 
 ## 5.7.2 Functional Unit Performance
+* **Latency bound**: 顺序执行一个操作所需要的最少时间
+* **Throughput bound**: 考虑到流水线，多个功能模块等因素下，执行一个操作所需要的最少时间
+
 ## 5.7.3 An Abstract Model of Proessor Operation
 需要能看懂 Figure 5.14 和 Figure 5.15 两个图，后面可能会用到。
 
@@ -177,7 +181,7 @@ by increasing the number of elements on each iteration.
 
 为什么 loop unrolling 能提高性能：
 
-1. 减少不必要的开销，比如 loop indexing (i++)，和 conditional branching (i < n)
+1. 减少不必要的开销，比如 loop indexing (i++)，和 conditional branching (i &lt; n)
 2. 我们可以进一步优化代码，以便能减少 critial path 的 operation 次数
 
 在 Figure 5.16 所示的 `combine5` 是一个 roop unrolling 的例子.
@@ -186,11 +190,158 @@ by increasing the number of elements on each iteration.
 虽然循环次数减少了一半，但是每次循环需要做两次乘法操作，
 所以总的时间没有变化。
 
-后面这一节会对这个例子做进一步优化。o
+后面这一节会对这个例子做进一步优化。
 
 Aside: `GCC` will perform some forms of loop unrolling
 when invoked with optimization level 3.
 
 # 5.9 Enhancing Parallelism
+之前程序的问题：后一个 computation 必须要在前一个 computation 完成之后才能进行，
+以至于不能进行 pipeline 以及利用多个 computation units.
+
 ## 5.9.1 Multiple Accumulators
+`combine5` 可以优化为 `combine6`，如 Figure 5.21 所示。
+
+为什么优化后的程序性能能提高：因为可以进行 pipeline，以及指令级并行。
+data-flow 图如 Figure 5.24 所示。
+
+优化之后的程序结果和优化之前的结果一样的前提条件是 `OP` 操作满足结合律。
+但是 floating-point multiplication and addition 不满足结合律、
+(due to rounding or overflowing)，
+因此大部分的编译器都不会对 floating-point code 进行类似的优化。
+
 ## 5.9.2 Reassociation Transformation
+`combine5` 可以优化为 `combine7`，如 Figure 5.26 所示。
+
+优化的地方在于
+
+```c
+acc = (acc OP data[i]) OP data[i+1]
+```
+
+转换为下面的代码
+
+```c
+acc = acc OP (data[i] OP data[i+1])
+```
+这样一来，`(data[i] OP data[i+1])` 这个计算不依赖与上一个循环的执行结果，
+所以可以在上一个循环结束之前就执行。
+
+Data-flow 图如 Figure 5.28, 5.29 所示。
+
+# 5.10 Summary of Results for Optimizing Combining Code
+一个总结，对比了各个程序的性能之后，得出结论：
+modern processors have considerable amounts of computing power,
+but we may need to coax this power out of them by
+*writing our programs in very stylized ways*.
+
+# 5.11 Some Limiting Factors
+## 5.11.1 Register Spilling
+当一个程序的并发程序 P 超过了寄存器的数目时，compiler 会把一些中间结果存到 memory 中，
+导致性能变差。
+
+比如 (P548) 在 `combine6` 程序中，$20 \times 20$ unrolling 的性能比 $10 \times 10$ 的 性能要差。
+因为 modern x86-64 processors 通常只有 16 个寄存器。
+
+## 5.11.2 Branch Prediction and Misprediction Penalties
+如果分支预测不正确，instruction pipeline 需要被 refilled，所以会产生 misprediction penalty.
+
+Conditional statements (a &lt; b ? a : b) 不会产生 misprediction penalty:
+因为它可以用 conditional move 指令来实现，而 conditional move 指令可以作为 pipeline 的一部分。
+
+### Do Not Be Overly Concerned about Predictable Branches
+如题：大部分的分支预测模块都能看出分支指令的 regular patterns and long-term trends。
+比如，循环语句中的 loop closing 判断语句一般预测为真，只有最后一次 loop 才会产生 misprediction.
+
+### Write Code Suitable for Implementation with Conditional Moves
+分支预测只有对 regular pattern 才有效果，
+而程序中很多 test 都是 unpredictable 的。
+所以最好把一些语句转换为 conditional move 语句。
+
+比如，可以通过 conditional operations 来计算一些值，
+然后根据这些值来更新 program state.
+
+例子： P552 页的两个程序。
+
+# 5.12 Understanding Memory Performance
+Modern processors 有专门的 load and store units，
+这些 units 有内部缓存来 hold outstanding requests.
+比如，书中的 reference machine 有 2 个 load units，1 个 store units。
+每个 load unit 可以最多 hold 72 个正在进行的 read requests，
+每个 store unit 可以最多 hold 42 个正在进行的 write requests.
+
+## 5.12.1 Load Performance
+感觉没有什么 takeaway，就是告诉我们 load 操作也需要时间。
+
+## 5.12.2 Store Performance
+Write-read dependency: 从之前 write 过的 memory location 读取数据，
+所以 memory read 的结果取决于之前 memory write 的结果。
+
+处理器 load 操作的执行过程 (Figure 5.34)：
+首先，在 store unit 中有一个 store buffer，
+存储着所有尚未执行完的 store 操作的 addresses 和 data.
+Load 操作执行时，会在 store buffer 中检查是否有 address 和 load 的 address 匹配，
+如果存在，则直接从 store buffer 中读取 data 作为 load 操作的结果。
+
+例子：Figure 5.33.
+Store 操作分为两步：计算出　store 操作的地址并存储到　store buffer 中，
+把 store 操作的数据存储在　store buffer 中。
+当存在 write-read dependency 时，load 操作要等待 store 操作的后一步完成，
+才能继续执行。
+所以，就会产生 Figure 5.36 和 Figure 5.37 所示的 data flow。
+
+可以通过 Practice Problem 5.11 & 5.12 来理解怎么来消除 write-read dependency.
+# 5.13 Life in the Real World: Performance Improvement Techiques
+优化程序的策略：
+
+* High-level design: 使用合适的算法和数据结构
+* Basic coding principles
+  - Eliminate excessive function calls. 如果可以的话，把 computation 移到循环以外执行。
+  - Eliminate unnecessary memory references. 使用 temporary 变量来存储中间结果，把最终结果计算出来之后才才把结果存到 array 或全局变量中。
+* Low-level optimizations
+  - Unrolling loops 以减少 overhead，且供进一步优化
+  - Increase instruction-level parallelism
+  - Rewrite conditional operations in a functional style，以便使用 conditional data transfer 语句
+
+# 5.14 Identifying and Eliminating Performance Bottlenecks
+通过 *code profilers* (analysis tools that collect performance data about a program as it executes) 来分析程序的各个部分的执行时间，因而找到需要改进的位置。
+
+## 5.14.1 Program Profiling
+Unix 系统中提供了一个名为 `GPROF` 的 profiling program.
+它产生两类数据：
+  * How much CPU time was spent for each of the functions in the program
+  * How many times each function gets called, categorized by which function performs the call
+
+使用 `GPROF`:
+
+1. 编译。需要增加 `-pg` 选项，不能使用 inline substitution 来优化代码
+```shell
+linux> gcc -Og -pg prog.c -o prog
+```
+2. 执行程序，会生成 `gmon.out` 文件
+```shell
+linux> ./prog file.txt
+```
+3. 分析文件 `gmon.out`
+```shell
+gprof prog
+```
+
+三个需要注意的地方：
+
+* 函数执行时间不是非常精确。精度大概在 1.0-10.0 ms。
+为什么？函数执行时间是这么算的，
+每隔一定的时间 ($\sigma$) 去中断一次 program，
+然后找到 program 正在执行的 function，
+给该 function 的执行时间增加 $\sigma$。
+* Calling information (调用和被调用次数) 是非常 reliable 的
+* 默认情况下不会显示库函数的 timings
+
+**其它复杂的 profilers**:
+`VTUNE` from Intel, `VALGRIND` 等等。
+这些程序可以以 basic block 为单位来分析程序的执行时间
+(一个 basic block 是一段 instruction，且中间不会进行跳转)。
+
+## 5.14.2 Using a Profiler to Guide Optimization
+可以看看，如何一步一步地对程序进行优化。
+优化后的程序比优化前的程序快近 $1,000\times$。
