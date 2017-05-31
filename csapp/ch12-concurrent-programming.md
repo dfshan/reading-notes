@@ -213,7 +213,7 @@ Producer:
 	P(mutex)
 	...
 	V(mutex)
-	V(slots)
+	V(items)
 
 Consumer:
 
@@ -221,8 +221,14 @@ Consumer:
 	P(mutex)
 	...
 	V(mutex)
-	V(items)
+	V(slots)
 
+Note: 为什么 `P(items)` 要在 `P(mutex)` 之前？
+如果先 `P(mutex)`，会造成死锁:
+假设 buffer 已经满了，
+此时 producer 获取到了 `mutex`，
+但是 `P(slots)` 导致进程等待，而由于获取了 `mutex` 锁，
+consumer 进程又无法从 buffer 中读取数据，造成死锁。
 
 ### Readers-Writers Problem
 Writers 对资源的反问是互斥的，但是可以有多个 thread 同时对资源读取。
@@ -239,36 +245,40 @@ Second readers-writers probelm:
 
 Reader:
 
-	P(r);
-	P(rmutex);
-	readcount ++;
-	if (readcount == 1)
-		P(w);
-	V(rmutex);
-	V(r)
-	...
-	P(rmutex);
-	readcount --;
-	if (readcount == 0)
-		V(w);
-	V(rmutex);
+```c
+P(r);
+P(rmutex);
+readcount ++;
+if (readcount == 1)
+	P(w);
+V(rmutex);
+V(r)
+...
+P(rmutex);
+readcount --;
+if (readcount == 0)
+	V(w);
+V(rmutex);
+```
 
 
 Writer:
 
-	P(wmutex);
-	writecount ++;
-	if (writecount == 1)
-		P(r);
-	V(wmutex);
-	P(w);
-	...
-	V(w);
-	P(wmutex);
-	writecount --;
-	if (writecount == 0)
-		V(r);
-	V(wmutex);
+```c
+P(wmutex);
+writecount ++;
+if (writecount == 1)
+	P(r);
+V(wmutex);
+P(w);
+...
+V(w);
+P(wmutex);
+writecount --;
+if (writecount == 0)
+	V(r);
+V(wmutex);
+```
 
 
 ## 12.5.5 Putting It Together: A Concurrent Server Based on Prethreading
@@ -313,35 +323,37 @@ Writer:
 
 例子：producer-consumer
 
-	cond_t qempty, qfull;
-	mutex_t mutex;
+```c
+cond_t qempty, qfull;
+mutex_t mutex;
 
-	void *producer(void *arg) {
-		int i;
-		for (i = 0; i < loops; i++) {
-			pthread_mutex_lock(&mutex);
-			while (buffer is full) {
-				pthread_cond_wait(&qfull, &mutex);
-			}
-			Put items into buffer
-			pthread_cond_signal(&qempty);
-			pthread_mutex_unlock(&mutex);
+void *producer(void *arg) {
+	int i;
+	for (i = 0; i < loops; i++) {
+		pthread_mutex_lock(&mutex);
+		while (buffer is full) {
+			pthread_cond_wait(&qfull, &mutex);
 		}
-
+		Put items into buffer
+		pthread_cond_signal(&qempty);
+		pthread_mutex_unlock(&mutex);
 	}
 
-	void *consumer(void *arg) {
-		int i;
-		for (i = 0; i <  loops, i++) {
-			pthread_mutex_lock(&mutex);
-			while (buffer is empty) {
-				pthread_cond_wait(&qempty, &mutex);
-			}
-			Get items from buffer
-			pthread_cond_signal(&qfull);
-			pthread_mutex_unlock(&mutex);
+}
+
+void *consumer(void *arg) {
+	int i;
+	for (i = 0; i <  loops, i++) {
+		pthread_mutex_lock(&mutex);
+		while (buffer is empty) {
+			pthread_cond_wait(&qempty, &mutex);
 		}
+		Get items from buffer
+		pthread_cond_signal(&qfull);
+		pthread_mutex_unlock(&mutex);
 	}
+}
+```
 
 
 # 12.6 Using Threading for Parallelism
@@ -352,7 +364,7 @@ Synchronization overhead is expensive and should be avoided if possible.
 ### Characterizing the Performance of Parallel Programs
 一些指标：
 
-*Speedup* \\(S_p\\): 1 个 core 上运行的时间除以 p 个 core 上的运行时间:
+*Speedup* $S_p$: 1 个 core 上运行的时间除以 p 个 core 上的运行时间:
 
 $$S_p = \frac{T_1}{T_p}$$
 
@@ -390,6 +402,6 @@ A *race* occurs when the correctness of a program depends on one thread reaching
 Example: Figure 12.42 & 12.43.
 
 ## 12.7.5 Deadlocks
-在使用 semaphores 时，一下的原则可以避免 deadlock:
+在使用 semaphores 时，以下的原则可以防止（不能避免） deadlock:
 
 *Mutex lock ordering rule*: Given a total ordering of all mutexes, a program is deadlock free if each thread acquires its mutex in order and releases them in reverse order.
